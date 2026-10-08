@@ -16,6 +16,8 @@ public sealed class MainViewModel : ObservableObject
     private readonly IResolutionService _resolutionService;
     private readonly IPresetStore _presetStore;
     private readonly IVirtualDisplayService _virtualDisplayService;
+    private readonly ICustomResolutionService _customResolutionService;
+    private readonly IEdidService _edidService;
     private readonly IDialogService _dialogs;
 
     private IReadOnlyList<MonitorInfo> _monitors = [];
@@ -34,6 +36,9 @@ public sealed class MainViewModel : ObservableObject
     private string _errorSuggestion = "";
     private string _errorDetails = "";
     private bool _detailsVisible;
+    private bool _canCreateFromError;
+    private IReadOnlyList<DisplayMode> _customModes = [];
+    private DisplayMode? _selectedCustomMode;
 
     // Evita que preencher os campos por código dispare a sincronização inversa.
     private bool _fillingFields;
@@ -45,8 +50,12 @@ public sealed class MainViewModel : ObservableObject
         IResolutionService resolutionService,
         IPresetStore presetStore,
         IVirtualDisplayService virtualDisplayService,
+        ICustomResolutionService customResolutionService,
+        IEdidService edidService,
         IDialogService dialogs)
     {
+        _customResolutionService = customResolutionService;
+        _edidService = edidService;
         _displayService = displayService;
         _resolutionService = resolutionService;
         _presetStore = presetStore;
@@ -58,6 +67,10 @@ public sealed class MainViewModel : ObservableObject
         ApplyCommand = new RelayCommand(async () => await ChangeResolutionAsync(persist: true), CanChangeResolution);
         SavePresetCommand = new RelayCommand(SavePreset, () => TryParseInput(out _));
         DeletePresetCommand = new RelayCommand(DeletePreset, () => SelectedPreset is { IsBuiltIn: false });
+        CreateCustomCommand = new RelayCommand(async () => await CreateCustomAsync(), CanCreateCustom);
+        DeleteCustomCommand = new RelayCommand(
+            async () => await DeleteCustomAsync(),
+            () => !IsBusy && SelectedMonitor is not null && SelectedCustomMode is not null);
         DiagnosticsCommand = new RelayCommand(ShowDiagnostics);
         ToggleDetailsCommand = new RelayCommand(() => DetailsVisible = !DetailsVisible);
 
@@ -71,6 +84,8 @@ public sealed class MainViewModel : ObservableObject
     public ICommand ApplyCommand { get; }
     public ICommand SavePresetCommand { get; }
     public ICommand DeletePresetCommand { get; }
+    public ICommand CreateCustomCommand { get; }
+    public ICommand DeleteCustomCommand { get; }
     public ICommand DiagnosticsCommand { get; }
     public ICommand ToggleDetailsCommand { get; }
 
@@ -93,6 +108,7 @@ public sealed class MainViewModel : ObservableObject
                 return;
 
             var typed = (Width: WidthText, Height: HeightText, Refresh: RefreshText);
+            CustomModes = _customResolutionService.GetCustomResolutions(value);
 
             var rates = value.SupportedModes
                 .Select(m => m.RefreshRate)
@@ -152,6 +168,39 @@ public sealed class MainViewModel : ObservableObject
             FillFields(value.ToMode());
             UpdateStatus();
         }
+    }
+
+    /// <summary>Resoluções personalizadas criadas pelo ResolutionX para o monitor selecionado.</summary>
+    public IReadOnlyList<DisplayMode> CustomModes
+    {
+        get => _customModes;
+        private set
+        {
+            if (SetProperty(ref _customModes, value))
+                OnPropertyChanged(nameof(HasCustomModes));
+        }
+    }
+
+    public bool HasCustomModes => _customModes.Count > 0;
+
+    public DisplayMode? SelectedCustomMode
+    {
+        get => _selectedCustomMode;
+        set
+        {
+            if (!SetProperty(ref _selectedCustomMode, value) || value is null)
+                return;
+
+            FillFields(value);
+            UpdateStatus();
+        }
+    }
+
+    /// <summary>O último erro foi "o driver não oferece esta resolução": mostra o atalho para criá-la.</summary>
+    public bool CanCreateFromError
+    {
+        get => _canCreateFromError;
+        private set => SetProperty(ref _canCreateFromError, value);
     }
 
     public string WidthText
@@ -250,6 +299,10 @@ public sealed class MainViewModel : ObservableObject
     }
 
     private bool CanChangeResolution() => !IsBusy && IsPhysical && SelectedMonitor is not null;
+
+    private bool CanCreateCustom()
+        => !IsBusy && IsPhysical && SelectedMonitor is { } monitor &&
+           TryParseInput(out var mode) && !monitor.Supports(mode);
 
     private void LoadMonitors(bool keepInput)
     {
@@ -395,7 +448,7 @@ public sealed class MainViewModel : ObservableObject
             StatusItems.Add(StatusItem.Ok("Resolução disponível"));
         else
             StatusItems.Add(StatusItem.Warning(
-                "Resolução fora da lista do driver: será verificada com o Windows ao testar"));
+                "Resolução fora da lista do driver: use CRIAR RESOLUÇÃO PERSONALIZADA para adicioná-la"));
     }
 
     private async Task ChangeResolutionAsync(bool persist)
@@ -480,6 +533,150 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    private async Task CreateCustomAsync()
+    {
+        var monitor = SelectedMonitor;
+        if (monitor is null || IsBusy || !TryParseInput(out var mode))
+            return;
+
+        ClearMessages();
+
+        var check = _customResolutionService.CheckCanCreate(monitor, mode);
+        if (!check.Success)
+        {
+            ShowError(check);
+            return;
+        }
+
+        var message =
+            $"Criar {mode} para o Monitor {monitor.Index} ({monitor.FriendlyName})?\n\n" +
+            "• O Windows vai pedir permissão de administrador.\n" +
+            "• O driver de vídeo será reiniciado: as telas ficam pretas por alguns segundos.\n" +
+            "• A resolução só é adicionada à lista. Para usá-la, clique depois em TESTAR RESOLUÇÃO.";
+        if (mode.Width > monitor.MaxMode.Width || mode.Height > monitor.MaxMode.Height)
+        {
+            message +=
+                $"\n\nAtenção: ela é maior que a resolução máxima deste monitor ({monitor.MaxMode.Width} × " +
+                $"{monitor.MaxMode.Height}). Muitos monitores, e quase todas as telas de notebook, não conseguem " +
+                "exibir isso. Se a imagem não aparecer no teste, a resolução anterior volta sozinha em 15 segundos.";
+        }
+
+        if (!_dialogs.Confirm("Criar resolução personalizada", message))
+            return;
+
+        IsBusy = true;
+        try
+        {
+            var created = await Task.Run(() => _customResolutionService.CreateResolution(monitor, mode));
+            if (!created.Success)
+            {
+                ShowError(created);
+                return;
+            }
+
+            var listed = await WaitForModeAsync(monitor, mode, shouldBeListed: true);
+            if (listed)
+                InfoMessage = $"{mode} foi criada e já aparece na lista. Clique em TESTAR RESOLUÇÃO para experimentá-la.";
+            else
+                InfoMessage =
+                    $"{mode} foi gravada no Windows, mas o driver ainda não a oferece. " +
+                    (created.Message.Length > 0 ? created.Message + " " : "Reinicie o computador. ") +
+                    $"Se depois de reiniciar ela continuar sem aparecer, o driver {monitor.Gpu.VendorName} não aceita " +
+                    "esta resolução para este monitor; nesse caso exclua-a em Resoluções personalizadas.";
+        }
+        catch (Exception ex)
+        {
+            ShowError(OperationResult.Fail(
+                "Ocorreu um erro inesperado ao criar a resolução.",
+                "Clique em Atualizar e confira a lista de Resoluções personalizadas.",
+                ex.ToString()));
+        }
+        finally
+        {
+            IsBusy = false;
+            LoadMonitors(keepInput: true);
+        }
+    }
+
+    private async Task DeleteCustomAsync()
+    {
+        var monitor = SelectedMonitor;
+        var mode = SelectedCustomMode;
+        if (monitor is null || mode is null || IsBusy)
+            return;
+
+        ClearMessages();
+
+        if (mode == monitor.CurrentMode)
+        {
+            ShowError(OperationResult.Fail(
+                "Esta resolução está em uso agora.",
+                "Troque o monitor para outra resolução antes de excluí-la."));
+            return;
+        }
+
+        if (!_dialogs.Confirm(
+                "Excluir resolução personalizada",
+                $"Excluir {mode} do Monitor {monitor.Index}?\n\n" +
+                "O Windows vai pedir permissão de administrador e o driver de vídeo será reiniciado " +
+                "(as telas ficam pretas por alguns segundos)."))
+            return;
+
+        IsBusy = true;
+        try
+        {
+            var deleted = await Task.Run(() => _customResolutionService.DeleteResolution(monitor, mode));
+            if (!deleted.Success)
+            {
+                ShowError(deleted);
+                return;
+            }
+
+            var gone = await WaitForModeAsync(monitor, mode, shouldBeListed: false);
+            InfoMessage = gone
+                ? $"{mode} foi excluída."
+                : $"{mode} foi excluída do Windows. Ela sai da lista do driver depois de reiniciar o computador.";
+        }
+        catch (Exception ex)
+        {
+            ShowError(OperationResult.Fail(
+                "Ocorreu um erro inesperado ao excluir a resolução.",
+                "Clique em Atualizar e confira a lista de Resoluções personalizadas.",
+                ex.ToString()));
+        }
+        finally
+        {
+            IsBusy = false;
+            SelectedCustomMode = null;
+            LoadMonitors(keepInput: true);
+        }
+    }
+
+    /// <summary>
+    /// Depois que o driver reinicia, o monitor some e volta em alguns segundos. Espera até a lista
+    /// de modos refletir a mudança, em vez de presumir que ela aconteceu.
+    /// </summary>
+    private async Task<bool> WaitForModeAsync(MonitorInfo monitor, DisplayMode mode, bool shouldBeListed)
+    {
+        for (var attempt = 0; attempt < 12; attempt++)
+        {
+            await Task.Delay(1000);
+            try
+            {
+                var monitors = await Task.Run(() => _displayService.GetMonitors());
+                var current = monitors.FirstOrDefault(m => m.InstanceId == monitor.InstanceId);
+                if (current is not null && current.Supports(mode) == shouldBeListed)
+                    return true;
+            }
+            catch (Exception)
+            {
+                // Durante o reinício do driver as consultas podem falhar; tenta de novo.
+            }
+        }
+
+        return false;
+    }
+
     private void SavePreset()
     {
         ClearMessages();
@@ -534,7 +731,11 @@ public sealed class MainViewModel : ObservableObject
 
     private void ShowDiagnostics()
     {
-        var report = DiagnosticsReport.Build(Monitors, _virtualDisplayService.GetStatus());
+        var report = DiagnosticsReport.Build(
+            Monitors,
+            _virtualDisplayService.GetStatus(),
+            _edidService.GetInfo,
+            _customResolutionService.GetCustomResolutions);
         _dialogs.ShowDiagnostics(report);
     }
 
@@ -545,6 +746,7 @@ public sealed class MainViewModel : ObservableObject
         ErrorSuggestion = "";
         ErrorDetails = "";
         DetailsVisible = false;
+        CanCreateFromError = false;
     }
 
     private void ShowError(OperationResult result)
@@ -554,5 +756,6 @@ public sealed class MainViewModel : ObservableObject
         ErrorSuggestion = result.Suggestion ?? "";
         ErrorDetails = result.TechnicalDetails ?? "";
         DetailsVisible = false;
+        CanCreateFromError = result.Failure == OperationFailure.ModeNotSupported;
     }
 }

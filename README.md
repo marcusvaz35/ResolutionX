@@ -1,7 +1,10 @@
 # ResolutionX
 
 Aplicativo Windows (WPF, .NET 10) para gerenciar resoluções de tela com teste seguro e
-restauração automática. Este repositório está na **Fase 1**.
+restauração automática. Este repositório está na **Fase 2** (resoluções personalizadas).
+
+**Download direto:** https://github.com/marcusvaz35/ResolutionX/releases/latest/download/ResolutionX.exe
+(baixe e abra; não precisa instalar nada).
 
 ## Como executar (no Windows 10 ou 11)
 
@@ -66,6 +69,32 @@ Não há outras dependências: o projeto usa apenas o .NET SDK, sem pacotes NuGe
 Nos dois casos a resolução é primeiro validada com o driver e, depois de aplicada, lida de volta
 para conferir. Um teste nunca é gravado no registro: no pior caso, reiniciar o PC desfaz.
 
+## Resoluções personalizadas
+
+Quando o driver não oferece uma resolução (ex.: 2060 × 1080), o botão
+**CRIAR RESOLUÇÃO PERSONALIZADA** a adiciona ao monitor:
+
+1. O ResolutionX calcula a temporização do sinal pelo padrão VESA CVT (Reduced Blanking).
+2. Acrescenta essa resolução ao EDID do monitor e grava o resultado como *EDID substituto*
+   (`EDID_OVERRIDE`, mecanismo oficial do Windows). A resolução nativa e as demais não são alteradas.
+3. Reinicia o driver de vídeo para ele reler o EDID. As telas ficam pretas por alguns segundos.
+4. A resolução passa a aparecer na lista. Para usá-la: **TESTAR RESOLUÇÃO**, com os mesmos 15 segundos.
+
+Só esta etapa pede permissão de administrador (o resto do app roda sem). Funciona com Intel, AMD
+e NVIDIA porque quem lê o EDID é o Windows. Limitações reais:
+
+- O monitor precisa aceitar o sinal. Resoluções **maiores que a nativa** quase nunca funcionam em
+  telas de notebook e em muitos monitores; processadores de LED e projetores costumam aceitar.
+- Alguns drivers ignoram o EDID substituto para certas saídas. O app confere isso e avisa.
+- Cabem cerca de 7 resoluções personalizadas por monitor.
+
+**Para desfazer:** selecione a resolução em *RESOLUÇÕES PERSONALIZADAS* e clique *Excluir selecionada*.
+Ao excluir a última, o EDID original do monitor volta a valer.
+
+**Emergência** (tela preta depois de criar uma resolução — improvável, pois a nativa é preservada):
+inicie o Windows em Modo de Segurança, abra o Editor do Registro e apague a chave `EDID_OVERRIDE` em
+`HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY\<monitor>\<instância>\Device Parameters`.
+
 ## Estrutura
 
 ```
@@ -76,11 +105,12 @@ ResolutionX.VirtualDisplay  VirtualDisplayService (contrato pronto; driver ainda
 ResolutionX.Driver          Reservado para o Indirect Display Driver (ver README da pasta)
 ```
 
-## O que a Fase 1 faz e não faz
+## O que já faz e o que falta
 
-Faz: detectar monitores, GPU e driver; listar e aplicar modos **que o driver já oferece**;
-teste com timeout e restauração; presets; diagnóstico.
+Faz: detectar monitores, GPU e driver; listar e aplicar modos do driver; teste com timeout e
+restauração; presets; criar e excluir resoluções personalizadas; ler EDID (modelo, série, nativa);
+diagnóstico.
 
-Ainda não faz: criar resoluções fora da lista do driver (Fase 2), ler EDID completo / número de
-série (Fase 3), monitor virtual (Fases 4–5), escalonamento (Fase 6), perfis (Fase 7).
-Os presets ficam em `%AppData%\ResolutionX\presets.json`.
+Ainda não faz: monitor virtual (Fases 4–5), escalonamento (Fase 6), perfis (Fase 7).
+Os presets ficam em `%AppData%\ResolutionX\presets.json` e o registro das resoluções personalizadas em
+`%AppData%\ResolutionX\custom-resolutions.json`.

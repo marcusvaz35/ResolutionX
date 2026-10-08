@@ -13,7 +13,8 @@ namespace ResolutionX.Windows.Services;
 /// </summary>
 public sealed partial class DisplayService : IDisplayService
 {
-    private sealed record TargetInfo(string? FriendlyName, string? ManufacturerId, string? ProductCode, string Connection);
+    private sealed record TargetInfo(
+        string? FriendlyName, string? ManufacturerId, string? ProductCode, string Connection, string? InstanceId);
 
     [GeneratedRegex(@"DISPLAY(\d+)$", RegexOptions.IgnoreCase)]
     private static partial Regex DisplayNumberRegex();
@@ -54,6 +55,7 @@ public sealed partial class DisplayService : IDisplayService
                 FriendlyName = ResolveMonitorName(adapter.DeviceName, target),
                 ManufacturerId = target?.ManufacturerId,
                 ProductCode = target?.ProductCode,
+                InstanceId = target?.InstanceId,
                 Connection = target?.Connection ?? "Conexão desconhecida",
                 IsPrimary = (adapter.StateFlags & NativeMethods.DISPLAY_DEVICE_PRIMARY_DEVICE) != 0,
                 CurrentMode = currentMode,
@@ -210,7 +212,7 @@ public sealed partial class DisplayService : IDisplayService
             if (NativeMethods.DisplayConfigGetDeviceInfo(ref target) != NativeMethods.ERROR_SUCCESS)
             {
                 result.TryAdd(source.viewGdiDeviceName,
-                    new TargetInfo(null, null, null, DescribeConnection(path.targetInfo.outputTechnology)));
+                    new TargetInfo(null, null, null, DescribeConnection(path.targetInfo.outputTechnology), null));
                 continue;
             }
 
@@ -219,10 +221,29 @@ public sealed partial class DisplayService : IDisplayService
                 target.monitorFriendlyDeviceName,
                 hasEdidIds ? DecodeManufacturerId(target.edidManufactureId) : null,
                 hasEdidIds ? target.edidProductCodeId.ToString("X4") : null,
-                DescribeConnection(target.outputTechnology)));
+                DescribeConnection(target.outputTechnology),
+                ToInstanceId(target.monitorDevicePath)));
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Converte o caminho de interface do monitor
+    /// (<c>\\?\DISPLAY#SAM0F99#5&amp;2f1c4a7&amp;0&amp;UID4352#{guid}</c>) no ID de instância do dispositivo.
+    /// </summary>
+    private static string? ToInstanceId(string? devicePath)
+    {
+        if (string.IsNullOrEmpty(devicePath))
+            return null;
+
+        var path = devicePath.StartsWith(@"\\?\", StringComparison.Ordinal) ? devicePath[4..] : devicePath;
+        var guidStart = path.LastIndexOf("#{", StringComparison.Ordinal);
+        if (guidStart > 0)
+            path = path[..guidStart];
+
+        var instanceId = path.Replace('#', '\\');
+        return instanceId.StartsWith(@"DISPLAY\", StringComparison.OrdinalIgnoreCase) ? instanceId : null;
     }
 
     /// <summary>

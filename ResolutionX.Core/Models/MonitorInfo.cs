@@ -18,6 +18,12 @@ public sealed class MonitorInfo
     /// <summary>Código de produto do EDID em hexadecimal, quando disponível.</summary>
     public string? ProductCode { get; init; }
 
+    /// <summary>
+    /// Identificador do dispositivo no Windows (ex.: <c>DISPLAY\SAM0F99\5&amp;2f1c4a7&amp;0&amp;UID4352</c>).
+    /// É a chave do monitor no registro, onde ficam o EDID e o EDID substituto.
+    /// </summary>
+    public string? InstanceId { get; init; }
+
     /// <summary>Tipo de conexão: HDMI, DisplayPort, tela interna, etc.</summary>
     public required string Connection { get; init; }
 

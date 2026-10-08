@@ -6,7 +6,11 @@ namespace ResolutionX.Core.Services;
 /// <summary>Monta o texto da tela "Diagnóstico" a partir do que foi lido do sistema.</summary>
 public static class DiagnosticsReport
 {
-    public static string Build(IReadOnlyList<MonitorInfo> monitors, VirtualDisplayStatus virtualStatus)
+    public static string Build(
+        IReadOnlyList<MonitorInfo> monitors,
+        VirtualDisplayStatus virtualStatus,
+        Func<MonitorInfo, EdidInfo?> readEdid,
+        Func<MonitorInfo, IReadOnlyList<DisplayMode>> readCustomModes)
     {
         var sb = new StringBuilder();
         sb.AppendLine("ResolutionX — Diagnóstico");
@@ -36,6 +40,28 @@ public static class DiagnosticsReport
             sb.AppendLine($"DPI: {(m.Dpi is int dpi ? dpi.ToString() : "não informado")}");
             sb.AppendLine($"Escala do Windows: {(m.ScalePercent is int s ? $"{s}%" : "não informada")}");
             sb.AppendLine("Modo: Monitor físico");
+            sb.AppendLine($"ID do dispositivo: {m.InstanceId ?? "não informado"}");
+
+            if (readEdid(m) is { } edid)
+            {
+                sb.AppendLine($"EDID: versão {edid.Version}, {edid.ExtensionCount} extensão(ões)");
+                sb.AppendLine($"EDID identificação: {edid.MonitorId}");
+                sb.AppendLine($"EDID modelo: {edid.MonitorName ?? "não informado"}");
+                sb.AppendLine($"EDID número de série: {edid.SerialNumber ?? "não informado"}");
+                sb.AppendLine($"EDID ano de fabricação: {(edid.ManufactureYear is int y ? y.ToString() : "não informado")}");
+                sb.AppendLine($"EDID resolução nativa: {(edid.NativeMode is { } n ? n.ToString() : "não informada")}");
+                sb.AppendLine($"EDID taxa máxima: {(edid.MaxRefreshRate is int r ? $"{r} Hz" : "não informada")}");
+            }
+            else
+            {
+                sb.AppendLine("EDID: não disponível");
+            }
+
+            var custom = readCustomModes(m);
+            sb.AppendLine($"Resoluções personalizadas ({custom.Count}):");
+            foreach (var mode in custom)
+                sb.AppendLine($"  {mode}{(m.Supports(mode) ? "" : "  (não listada pelo driver)")}");
+
             sb.AppendLine($"Modos suportados ({m.SupportedModes.Count}):");
             foreach (var mode in m.SupportedModes)
                 sb.AppendLine($"  {mode}");
@@ -43,7 +69,7 @@ public static class DiagnosticsReport
 
         sb.AppendLine();
         sb.AppendLine("=== Recursos ===");
-        sb.AppendLine("Resoluções personalizadas (fora da lista do driver): ainda não implementado (Fase 2)");
+        sb.AppendLine("Resoluções personalizadas: disponível para monitores físicos (EDID substituto)");
         sb.AppendLine($"Monitor virtual: {(virtualStatus.DriverInstalled ? "disponível" : "indisponível")} — {virtualStatus.Message}");
         sb.AppendLine("Escalonamento: ainda não implementado (Fase 6)");
         return sb.ToString();

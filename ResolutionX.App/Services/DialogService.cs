@@ -12,6 +12,11 @@ public sealed class DialogService : IDialogService
         return dialog.ShowDialog() == true;
     }
 
+    public bool Confirm(string title, string message)
+        => MessageBox.Show(
+            Application.Current.MainWindow!, message, title, MessageBoxButton.YesNo, MessageBoxImage.Question,
+            MessageBoxResult.No) == MessageBoxResult.Yes;
+
     public void ShowDiagnostics(string report)
     {
         var window = new DiagnosticsWindow(report) { Owner = Application.Current.MainWindow };

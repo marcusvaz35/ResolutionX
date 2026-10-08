@@ -204,8 +204,10 @@ public sealed class ResolutionService : IResolutionService
                       "informadas pelo próprio hardware. Instalar o driver do fabricante da placa de vídeo " +
                       "normalmente libera mais opções."
                     : $"O driver {monitor.Gpu.VendorName} não oferece {mode} para este monitor. " +
-                      "Escolha uma das resoluções suportadas ou utilize o Monitor Virtual.",
-                technical),
+                      "Você pode criá-la como resolução personalizada, escolher uma das suportadas " +
+                      "ou utilizar o Monitor Virtual.",
+                technical,
+                OperationFailure.ModeNotSupported),
 
             NativeMethods.DISP_CHANGE_RESTART => OperationResult.Fail(
                 "Esta resolução só pode ser aplicada após reiniciar o computador.",

@@ -166,6 +166,10 @@
                                         HorizontalAlignment="Stretch" Padding="0,10"
                                         ToolTip="Aplica, pede a mesma confirmação de 15 segundos e salva no Windows." />
                             </Grid>
+
+                            <Button Content="CRIAR RESOLUÇÃO PERSONALIZADA" Command="{Binding CreateCustomCommand}"
+                                    HorizontalAlignment="Stretch" Padding="0,10" Margin="0,12,0,0"
+                                    ToolTip="Adiciona ao monitor uma resolução que o driver não oferece. Pede permissão de administrador." />
                         </StackPanel>
                     </Border>
 
@@ -183,6 +187,10 @@
                             <TextBlock Text="{Binding ErrorTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
                             <TextBlock Text="{Binding ErrorSuggestion}" Style="{StaticResource SecondaryText}"
                                        Margin="0,6,0,0" />
+                            <Button Content="CRIAR ESTA RESOLUÇÃO" Command="{Binding CreateCustomCommand}"
+                                    Style="{DynamicResource AccentButtonStyle}"
+                                    Visibility="{Binding CanCreateFromError, Converter={StaticResource BoolToVisibility}}"
+                                    HorizontalAlignment="Left" Margin="0,12,0,0" Padding="14,7" />
                             <StackPanel Visibility="{Binding HasErrorDetails, Converter={StaticResource BoolToVisibility}}">
                                 <Button Content="Ver detalhes" Command="{Binding ToggleDetailsCommand}"
                                         HorizontalAlignment="Left" Margin="0,12,0,0" Padding="12,5" />
@@ -195,6 +203,23 @@
                             </StackPanel>
                         </StackPanel>
                     </Border>
+
+                    <!-- Resoluções criadas pelo ResolutionX para o monitor selecionado -->
+                    <StackPanel Margin="0,0,0,20"
+                                Visibility="{Binding HasCustomModes, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="RESOLUÇÕES PERSONALIZADAS" Style="{StaticResource SectionHeader}" />
+                        <Border Style="{StaticResource Card}" Padding="6">
+                            <StackPanel>
+                                <ListBox ItemsSource="{Binding CustomModes}"
+                                         SelectedItem="{Binding SelectedCustomMode, Mode=TwoWay}"
+                                         MaxHeight="140"
+                                         BorderThickness="0"
+                                         Background="Transparent" />
+                                <Button Content="Excluir selecionada" Command="{Binding DeleteCustomCommand}"
+                                        HorizontalAlignment="Left" Margin="6,8,6,6" Padding="12,6" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
 
                     <TextBlock Text="STATUS" Style="{StaticResource SectionHeader}" />
                     <Border Style="{StaticResource Card}">
