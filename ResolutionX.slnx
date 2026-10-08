@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="ResolutionX.App/ResolutionX.App.csproj" />
+  <Project Path="ResolutionX.Core/ResolutionX.Core.csproj" />
+  <Project Path="ResolutionX.Windows/ResolutionX.Windows.csproj" />
+  <Project Path="ResolutionX.VirtualDisplay/ResolutionX.VirtualDisplay.csproj" />
+</Solution>

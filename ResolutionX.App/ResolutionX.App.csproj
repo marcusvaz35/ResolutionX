@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>ResolutionX.App</RootNamespace>
+    <AssemblyName>ResolutionX</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- ThemeMode (tema Fluent do WPF) ainda é marcado como experimental pelo SDK. -->
+    <NoWarn>$(NoWarn);WPF0001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ResolutionX.Core\ResolutionX.Core.csproj" />
+    <ProjectReference Include="..\ResolutionX.Windows\ResolutionX.Windows.csproj" />
+    <ProjectReference Include="..\ResolutionX.VirtualDisplay\ResolutionX.VirtualDisplay.csproj" />
+  </ItemGroup>
+
+</Project>

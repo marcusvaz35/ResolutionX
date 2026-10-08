@@ -1,0 +1,31 @@
+<Window x:Class="ResolutionX.App.Views.ConfirmResolutionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ResolutionX — Teste de segurança"
+        SizeToContent="WidthAndHeight"
+        ResizeMode="NoResize"
+        Topmost="True"
+        WindowStartupLocation="Manual">
+    <StackPanel Margin="32" Width="460">
+        <TextBlock Text="Você consegue visualizar esta tela?" FontSize="22" FontWeight="SemiBold"
+                   TextWrapping="Wrap" />
+        <TextBlock x:Name="ModeText" FontSize="16" Margin="0,10,0,0" />
+        <TextBlock x:Name="CountdownText" Style="{StaticResource SecondaryText}" Margin="0,16,0,8" />
+        <ProgressBar x:Name="CountdownBar" Height="4" Minimum="0" />
+
+        <Grid Margin="0,24,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <!-- Nenhum botão é o padrão: apertar Enter às cegas não pode manter uma tela ilegível.
+                 Esc (IsCancel) restaura. -->
+            <Button Grid.Column="0" Content="SIM, MANTER" Click="OnKeepClick"
+                    Style="{DynamicResource AccentButtonStyle}"
+                    HorizontalAlignment="Stretch" Padding="0,10" />
+            <Button Grid.Column="2" Content="NÃO, RESTAURAR" Click="OnRestoreClick" IsCancel="True"
+                    HorizontalAlignment="Stretch" Padding="0,10" />
+        </Grid>
+    </StackPanel>
+</Window>
